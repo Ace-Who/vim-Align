@@ -16,14 +16,13 @@ User will be prompted to input the pattern and its ordinal(s) amoung multiple
 occurrences in the same line.
 
 Works in normal mode or visual mode.
-
 In normal mode, it affects all lines.
 In visual mode, it affects selected lines.
 
 ## Note
 
-To avoid "Too many \(" error, use "\%(\)" instead of "\(\)" in the pattern if
-needed.
+To avoid 'Too many \\(' error, use '\\%(\\)' instead of '\\(\\)' in the pattern
+  if needed.
 
-Known limitation: including '\zs' or '\ze' in the pattern will lead to unwanted
-results.
+Known limitation: including '\\zs' or '\\ze' in the pattern will lead to
+unwanted results.
