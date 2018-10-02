@@ -11,8 +11,8 @@ nmap <leader>ali <Plug>AlignAlign
 xmap <leader>ali <Plug>AlignAlign
 nnoremap <script> <Plug>AlignAlign <SID>Align
 xnoremap <script> <Plug>AlignAlign <SID>Align
-nnoremap <SID>Align :call <SID>Align(mode(), 0)<CR>
-xnoremap <SID>Align :<C-U>call <SID>Align(visualmode(), 0)<CR>
+nnoremap <SID>Align :call <SID>AlignAsk(mode(), 0)<CR>
+xnoremap <SID>Align :<C-U>call <SID>AlignAsk(visualmode(), 0)<CR>
 
 " ToDo: Align the pattern paragraph by paragraph.
 
@@ -21,10 +21,10 @@ nmap <leader>ALI <Plug>AlignUnalign
 xmap <leader>ALI <Plug>AlignUnalign
 nnoremap <script> <Plug>AlignUnalign <SID>Unalign
 xnoremap <script> <Plug>AlignUnalign <SID>Unalign
-nnoremap <SID>Unalign :call <SID>Align(mode(), 1)<CR>
-xnoremap <SID>Unalign :<C-U>call <SID>Align(visualmode(), 1)<CR>
+nnoremap <SID>Unalign :call <SID>AlignAsk(mode(), 1)<CR>
+xnoremap <SID>Unalign :<C-U>call <SID>AlignAsk(visualmode(), 1)<CR>
 
-function! s:Align(mode, flag) "{{{
+function! s:AlignAsk(mode, flag) "{{{
   let l:prompt = 'Step 1/2: enter the pattern to (un)align: '
   let l:pat = input(l:prompt)
   if match(l:pat, '\S') == -1
@@ -136,8 +136,6 @@ function! s:UnalignProcess(mode, pat, count) "{{{
     endif
     let l:lnum += 1
   endwhile
-
-  nohlsearch
 
 endfunction "}}}
 
