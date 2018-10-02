@@ -4,55 +4,56 @@
 let s:save_cpoptions = &cpoptions
 set cpoptions&vim
 
-" Known limitation: including '\zs' or '\ze' in the pattern will lead to
-" unwanted results.
-
-" Aligning  {{{
-
-" Ask user for a string pattern and its ordinal in that line, align it in
-" every line by inserting spaces. In visual mode, do the same thing only for
-" the selected lines.
+" Ask user for a string pattern and the match count(s) in that line, align it
+" in every line by inserting spaces. In visual mode, do the same thing only
+" for the selected lines.
 nmap <leader>ali <Plug>AlignAlign
 xmap <leader>ali <Plug>AlignAlign
 nnoremap <script> <Plug>AlignAlign <SID>Align
 xnoremap <script> <Plug>AlignAlign <SID>Align
-nnoremap <SID>Align :call <SID>Align(mode())<CR>
-xnoremap <SID>Align :<C-U>call <SID>Align(visualmode())<CR>
+nnoremap <SID>Align :call <SID>Align(mode(), 0)<CR>
+xnoremap <SID>Align :<C-U>call <SID>Align(visualmode(), 0)<CR>
 
 " ToDo: Align the pattern paragraph by paragraph.
 
-function! s:Align(mode) "{{{
-  let l:prompt = 'Step 1/2: enter the pattern to align (''\V'' is assumed): '
+" reversing aligning operation, removing leading spaces
+nmap <leader>ALI <Plug>AlignUnalign
+xmap <leader>ALI <Plug>AlignUnalign
+nnoremap <script> <Plug>AlignUnalign <SID>Unalign
+xnoremap <script> <Plug>AlignUnalign <SID>Unalign
+nnoremap <SID>Unalign :call <SID>Align(mode(), 1)<CR>
+xnoremap <SID>Unalign :<C-U>call <SID>Align(visualmode(), 1)<CR>
+
+function! s:Align(mode, flag) "{{{
+  let l:prompt = 'Step 1/2: enter the pattern to (un)align: '
   let l:pat = input(l:prompt)
   if match(l:pat, '\S') == -1
     echoerr 'The pattern must contain a non-blank character.'
     return
   endif
-  let l:prompt = 'Step 2/2: enter its ordinal(s) (comma-separated)'
+  let l:prompt = 'Step 2/2: enter the match count(s) (comma-separated)'
       \ . ' in the line: '
-  let l:ordinals = split(input(l:prompt, 1), ',')
-  " ToDo: handle negative ordinal.
-  for l:ordinal in l:ordinals
-    let l:ordinal = str2nr(l:ordinal)
-    if l:ordinal < 1
-      echoerr 'The ordinal should be a positive integer.'
+  let l:counts = split(input(l:prompt, 1), ',')
+  " ToDo: handle negative count.
+  for l:count in l:counts
+    let l:count = str2nr(l:count)
+    if l:count < 1
+      echoerr 'The count should be a positive integer.'
       return
     endif
-    call s:AlignProcess(a:mode, l:pat, l:ordinal)
+    if a:flag == 0
+      call s:AlignProcess(a:mode, l:pat, l:count)
+    else
+      call s:UnalignProcess(a:mode, l:pat, l:count)
+    endif
   endfor
-  redraw
-  echom "Aligned '" . l:pat . "'s."
 endfunction "}}}
 
-function! s:AlignProcess(mode, pat, ordinal) " {{{
+function! s:AlignProcess(mode, pat, count) " {{{
 
   let [l:startLN, l:endLN] = a:mode ==? visualmode()
       \ ? [line("'<"), line("'>")]
       \ : [1, line("$")]
-
-  let l:assert = '\V'
-      \ . '\(' . repeat(a:pat . '\V\.\*', a:ordinal) . '\)\@<='
-      \ . '\(' . repeat(a:pat . '\V\.\*', a:ordinal + 1) . '\)\@<!'
 
   " Find the align position.
   let l:lnum = l:startLN
@@ -74,7 +75,7 @@ function! s:AlignProcess(mode, pat, ordinal) " {{{
     " display width, has taken over responsibility from match().
 
     let l:lstr = getline(l:lnum)
-    let l:matchIdx = match(l:lstr, '\V' . a:pat . l:assert)
+    let l:matchIdx = match(l:lstr, a:pat, 0, a:count)
     if l:matchIdx != -1
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:preDisplayWidth = strdisplaywidth(l:leadingStr)
@@ -92,18 +93,15 @@ function! s:AlignProcess(mode, pat, ordinal) " {{{
   let l:lnum = l:startLN
   while l:lnum <= l:endLN
     let l:lstr = getline(l:lnum)
-    let l:aStrIdx = match(l:lstr, '\V' . a:pat . l:assert)
-    if l:aStrIdx != -1
-      let l:matchIdx = match(l:lstr, '\V' . a:pat . l:assert)
+    let l:matchIdx = match(l:lstr, a:pat, 0, a:count)
+    if l:matchIdx != -1
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:preDisplayWidth = strdisplaywidth(l:leadingStr)
       if l:preDisplayWidth < l:aliIdx
-        call setline(l:lnum, substitute(
-            \ l:lstr, 
-            \ '\ze\V' . a:pat . l:assert,
-            \ repeat(' ', l:aliIdx - l:preDisplayWidth),
-            \ ''
-        \))
+        let l:lstrNew = l:leadingStr
+            \ . repeat(' ', l:aliIdx - l:preDisplayWidth)
+            \ . strpart(l:lstr, l:matchIdx)
+        call setline(l:lnum, l:lstrNew)
       endif
     endif
     let l:lnum += 1
@@ -111,62 +109,37 @@ function! s:AlignProcess(mode, pat, ordinal) " {{{
 
 endfunction " }}}
 
-" }}}
-
-" unaligning, or compressing {{{
-
-" reversing aligning operation, removing leading spaces
-nmap <leader>ALI <Plug>AlignUnalign
-xmap <leader>ALI <Plug>AlignUnalign
-nnoremap <script> <Plug>AlignUnalign <SID>Unalign
-xnoremap <script> <Plug>AlignUnalign <SID>Unalign
-nnoremap <SID>Unalign :call <SID>Unalign(mode())<CR>
-xnoremap <SID>Unalign :<C-U>call <SID>Unalign(visualmode())<CR>
-
-function! s:Unalign(mode) "{{{
-  " The prefixed spaces in input will be preserved and not be interpreted as
-  " part of the pattern.
-  let l:prompt = 'Step 1/2: enter the pattern to trim leading spaces: '
-  let l:pat = input(l:prompt)
-  if match(l:pat, '\S') == -1
-    echoerr 'The pattern must contain a non-blank character.'
-    return
-  endif
-  let l:prompt = 'Step 2/2: enter its ordinal(s) (comma-separated)'
-      \ . ' in the line: '
-  let l:ordinals = split(input(l:prompt, 1), ',')
-  " ToDo: handle negative ordinal.
-  for l:ordinal in l:ordinals
-    let l:ordinal = str2nr(l:ordinal)
-    if l:ordinal < 1
-      echoerr 'The ordinal should be a positive integer.'
-      return
-    endif
-    call s:UnalignProcess(a:mode, l:pat, l:ordinal)
-  endfor
-endfunction "}}}
-
-function! s:UnalignProcess(mode, pat, ordinal) "{{{
+function! s:UnalignProcess(mode, pat, count) "{{{
 
   let [l:startLN, l:endLN] = a:mode ==? visualmode()
       \ ? [line("'<"), line("'>")]
       \ : [1, line("$")]
 
+  " The prefixed spaces in input will be preserved and not be interpreted as
+  " part of the pattern.
   let l:preSpNum = match(a:pat, '\S')
-  let l:pat = escape(strpart(a:pat, l:preSpNum), '/')
-  let l:assert = '\V'
-      \ . '\(' . repeat(l:pat . '\V\.\*', a:ordinal) . '\)\@<='
-      \ . '\(' . repeat(l:pat . '\V\.\*', a:ordinal + 1) . '\)\@<!'
+  let l:trim = strpart(a:pat, l:preSpNum)
 
-  redraw
-  execute l:startLN . ',' . l:endLN
-      \ . 's/\(^\|\S\)\zs \{-}\ze \{,' . l:preSpNum . '}\V' . l:pat . l:assert
-      \ . '//e'
+  let l:lnum = l:startLN
+  while l:lnum <= l:endLN
+    let l:lstr = getline(l:lnum)
+    let l:matchIdx = match(l:lstr, l:trim, 0, a:count)
+    if l:matchIdx != -1
+      let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
+      let l:spIdx = match(l:leadingStr, ' *$')
+      if l:preSpNum < l:matchIdx - l:spIdx
+        let l:lstrNew = strpart(l:lstr, 0, l:spIdx)
+            \ . repeat(' ', l:preSpNum)
+            \ . strpart(l:lstr, l:matchIdx)
+        call setline(l:lnum, l:lstrNew)
+      endif
+    endif
+    let l:lnum += 1
+  endwhile
+
   nohlsearch
 
 endfunction "}}}
-
-" }}}
 
 let &cpoptions = s:save_cpoptions
 unlet s:save_cpoptions
