@@ -11,20 +11,18 @@ nmap <leader>ali <Plug>AlignAlign
 xmap <leader>ali <Plug>AlignAlign
 nnoremap <script> <Plug>AlignAlign <SID>Align
 xnoremap <script> <Plug>AlignAlign <SID>Align
-nnoremap <SID>Align :call <SID>AlignAsk(mode(), 0)<CR>
-xnoremap <SID>Align :<C-U>call <SID>AlignAsk(visualmode(), 0)<CR>
-
-" ToDo: Align the pattern paragraph by paragraph.
+nnoremap <SID>Align :<C-U>call <SID>AlignAsk(mode(), 0, v:count)<CR>
+xnoremap <SID>Align :<C-U>call <SID>AlignAsk(visualmode(), 0, v:count)<CR>
 
 " reversing aligning operation, removing leading spaces
 nmap <leader>ALI <Plug>AlignUnalign
 xmap <leader>ALI <Plug>AlignUnalign
 nnoremap <script> <Plug>AlignUnalign <SID>Unalign
 xnoremap <script> <Plug>AlignUnalign <SID>Unalign
-nnoremap <SID>Unalign :call <SID>AlignAsk(mode(), 1)<CR>
-xnoremap <SID>Unalign :<C-U>call <SID>AlignAsk(visualmode(), 1)<CR>
+nnoremap <SID>Unalign :<C-U>call <SID>AlignAsk(mode(), 1, v:count)<CR>
+xnoremap <SID>Unalign :<C-U>call <SID>AlignAsk(visualmode(), 1, v:count)<CR>
 
-function! s:AlignAsk(mode, flag) "{{{
+function! s:AlignAsk(mode, flag, count) abort "{{{
   let l:prompt = 'Step 1/2: enter the pattern to (un)align: '
   let l:pat = input(l:prompt)
   if match(l:pat, '\S') == -1
@@ -33,32 +31,51 @@ function! s:AlignAsk(mode, flag) "{{{
   endif
   let l:prompt = 'Step 2/2: enter the match count(s) (comma-separated)'
       \ . ' in the line: '
-  let l:counts = split(input(l:prompt, 1), ',')
-  " ToDo: handle negative count.
-  for l:count in l:counts
-    let l:count = str2nr(l:count)
-    if l:count < 1
+  " ToDo: handle negative match count.
+  let l:matchCounts = split(input(l:prompt, 1), ',')
+  for l:matchCount in l:matchCounts
+    let l:matchCount = str2nr(l:matchCount)
+    if l:matchCount < 1
       echoerr 'The count should be a positive integer.'
       return
     endif
+    " Determine align range using the first item of the user specified match
+    " count list.
+    if !exists('l:range')
+      let l:range = s:AlignRange(a:mode, a:count, l:pat, l:matchCount)
+    endif
     if a:flag == 0
-      call s:AlignProcess(a:mode, l:pat, l:count)
+      call s:AlignProcess(l:range, l:pat, l:matchCount)
     else
-      call s:UnalignProcess(a:mode, l:pat, l:count)
+      call s:UnalignProcess(l:range, l:pat, l:matchCount)
     endif
   endfor
+  redraw
+  echo 'Processed' l:range[1] - l:range[0] + 1 'lines.'
 endfunction "}}}
 
-function! s:AlignProcess(mode, pat, count) " {{{
+function! s:AlignRange(mode, count, pat, matchCount) "{{{
+  if a:mode ==? visualmode()
+    return [line("'<"), line("'>")]
+  elseif a:count > 1
+    return [line('.'), min([line('$'), line('.') + a:count - 1])]
+  endif
+  let l:lnum = line('.')
+  while l:lnum <= line('$')
+    let l:lstr = getline(l:lnum)
+    if match(l:lstr, a:pat, 0, a:matchCount) == -1
+      return [line('.'), l:lnum - 1]
+    endif
+    let l:lnum += 1
+  endwhile
+endfunction "}}}
 
-  let [l:startLN, l:endLN] = a:mode ==? visualmode()
-      \ ? [line("'<"), line("'>")]
-      \ : [1, line("$")]
+function! s:AlignProcess(range, pat, matchCount) abort " {{{
 
   " Find the align position.
-  let l:lnum = l:startLN
+  let l:lnum = a:range[0]
   let l:aliIdx = 0
-  while l:lnum <= l:endLN
+  while l:lnum <= a:range[1]
 
     " A multibyte character such as a Chinese character, when the option
     " 'encoding' is set to utf-8, needs 2 to 4 bytes to store in memory which
@@ -75,7 +92,7 @@ function! s:AlignProcess(mode, pat, count) " {{{
     " display width, has taken over responsibility from match().
 
     let l:lstr = getline(l:lnum)
-    let l:matchIdx = match(l:lstr, a:pat, 0, a:count)
+    let l:matchIdx = match(l:lstr, a:pat, 0, a:matchCount)
     if l:matchIdx != -1
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:preDisplayWidth = strdisplaywidth(l:leadingStr)
@@ -90,10 +107,10 @@ function! s:AlignProcess(mode, pat, count) " {{{
   endif
 
   " Align the specified pattern by adding spaces.
-  let l:lnum = l:startLN
-  while l:lnum <= l:endLN
+  let l:lnum = a:range[0]
+  while l:lnum <= a:range[1]
     let l:lstr = getline(l:lnum)
-    let l:matchIdx = match(l:lstr, a:pat, 0, a:count)
+    let l:matchIdx = match(l:lstr, a:pat, 0, a:matchCount)
     if l:matchIdx != -1
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:preDisplayWidth = strdisplaywidth(l:leadingStr)
@@ -109,21 +126,17 @@ function! s:AlignProcess(mode, pat, count) " {{{
 
 endfunction " }}}
 
-function! s:UnalignProcess(mode, pat, count) "{{{
-
-  let [l:startLN, l:endLN] = a:mode ==? visualmode()
-      \ ? [line("'<"), line("'>")]
-      \ : [1, line("$")]
+function! s:UnalignProcess(range, pat, matchCount) abort "{{{
 
   " The prefixed spaces in input will be preserved and not be interpreted as
   " part of the pattern.
   let l:preSpNum = match(a:pat, '\S')
   let l:trim = strpart(a:pat, l:preSpNum)
 
-  let l:lnum = l:startLN
-  while l:lnum <= l:endLN
+  let l:lnum = a:range[0]
+  while l:lnum <= a:range[1]
     let l:lstr = getline(l:lnum)
-    let l:matchIdx = match(l:lstr, l:trim, 0, a:count)
+    let l:matchIdx = match(l:lstr, l:trim, 0, a:matchCount)
     if l:matchIdx != -1
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:spIdx = match(l:leadingStr, ' *$')
