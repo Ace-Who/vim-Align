@@ -64,10 +64,11 @@ function! s:AlignRange(mode, count, pat, matchCount) "{{{
   while l:lnum <= line('$')
     let l:lstr = getline(l:lnum)
     if match(l:lstr, a:pat, 0, a:matchCount) == -1
-      return [line('.'), l:lnum - 1]
+      break
     endif
     let l:lnum += 1
   endwhile
+  return [line('.'), l:lnum - 1]
 endfunction "}}}
 
 function! s:AlignProcess(range, pat, matchCount) abort " {{{
