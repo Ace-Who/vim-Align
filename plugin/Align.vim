@@ -11,18 +11,18 @@ nmap <leader>ali <Plug>AlignAlign
 xmap <leader>ali <Plug>AlignAlign
 nnoremap <script> <Plug>AlignAlign <SID>Align
 xnoremap <script> <Plug>AlignAlign <SID>Align
-nnoremap <SID>Align :<C-U>call <SID>AlignAsk(mode(), 0, v:count)<CR>
-xnoremap <SID>Align :<C-U>call <SID>AlignAsk(visualmode(), 0, v:count)<CR>
+nnoremap <SID>Align :<C-U>call <SID>Ask(mode(), 'a', v:count)<CR>
+xnoremap <SID>Align :<C-U>call <SID>Ask(visualmode(), 'a', v:count)<CR>
 
 " reversing aligning operation, removing leading spaces
 nmap <leader>ALI <Plug>AlignUnalign
 xmap <leader>ALI <Plug>AlignUnalign
 nnoremap <script> <Plug>AlignUnalign <SID>Unalign
 xnoremap <script> <Plug>AlignUnalign <SID>Unalign
-nnoremap <SID>Unalign :<C-U>call <SID>AlignAsk(mode(), 1, v:count)<CR>
-xnoremap <SID>Unalign :<C-U>call <SID>AlignAsk(visualmode(), 1, v:count)<CR>
+nnoremap <SID>Unalign :<C-U>call <SID>Ask(mode(), 'u', v:count)<CR>
+xnoremap <SID>Unalign :<C-U>call <SID>Ask(visualmode(), 'u', v:count)<CR>
 
-function! s:AlignAsk(mode, flag, count) abort "{{{
+function! s:Ask(mode, flag, count) abort "{{{
   let l:prompt = 'Step 1/2: enter the pattern to (un)align: '
   let l:pat = input(l:prompt)
   if match(l:pat, '\S') == -1
@@ -42,9 +42,11 @@ function! s:AlignAsk(mode, flag, count) abort "{{{
     " Determine align range using the first item of the user specified match
     " count list.
     if !exists('l:range')
-      let l:range = s:AlignRange(a:mode, a:count, l:pat, l:matchCount)
+      let l:range = a:flag == 'a'
+          \ ? s:Range(a:mode, a:count, l:pat, l:matchCount)
+          \ : s:Range(a:mode, a:count, s:LTrim(l:pat), l:matchCount)
     endif
-    if a:flag == 0
+    if a:flag == 'a'
       call s:AlignProcess(l:range, l:pat, l:matchCount)
     else
       call s:UnalignProcess(l:range, l:pat, l:matchCount)
@@ -54,7 +56,11 @@ function! s:AlignAsk(mode, flag, count) abort "{{{
   echo 'Processed' l:range[1] - l:range[0] + 1 'lines.'
 endfunction "}}}
 
-function! s:AlignRange(mode, count, pat, matchCount) "{{{
+function! s:LTrim(str) "{{{
+  return strpart(a:str, match(a:str, '\S'))
+endfunction! "}}}
+
+function! s:Range(mode, count, pat, matchCount) "{{{
   if a:mode ==? visualmode()
     return [line("'<"), line("'>")]
   elseif a:count > 1
