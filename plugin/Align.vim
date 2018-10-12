@@ -4,9 +4,7 @@
 let s:save_cpoptions = &cpoptions
 set cpoptions&vim
 
-" Ask user for a string pattern and the match count(s) in that line, align it
-" in every line by inserting spaces. In visual mode, do the same thing only
-" for the selected lines.
+" Align the specified pattern in target lines by inserting spaces.
 nmap <leader>ali <Plug>AlignAlign
 xmap <leader>ali <Plug>AlignAlign
 nnoremap <script> <Plug>AlignAlign <SID>Align
@@ -14,7 +12,7 @@ xnoremap <script> <Plug>AlignAlign <SID>Align
 nnoremap <SID>Align :<C-U>call <SID>Ask(mode(), 'a', v:count)<CR>
 xnoremap <SID>Align :<C-U>call <SID>Ask(visualmode(), 'a', v:count)<CR>
 
-" reversing aligning operation, removing leading spaces
+" Reversing aligning operation, removing leading spaces.
 nmap <leader>ALI <Plug>AlignUnalign
 xmap <leader>ALI <Plug>AlignUnalign
 nnoremap <script> <Plug>AlignUnalign <SID>Unalign
@@ -26,25 +24,28 @@ function! s:Ask(mode, flag, count) abort "{{{
   let l:prompt = 'Step 1/2: enter the pattern to (un)align: '
   let l:pat = input(l:prompt)
   if match(l:pat, '\S') == -1
-    echoerr 'The pattern must contain a non-blank character.'
-    return
+    if match(s:CursorChar(), '\S') == -1
+      echoerr 'The pattern must contain a non-blank character.'
+      return
+    endif
+    let l:pat = '\V' . escape(s:CursorChar(), '\')
   endif
   let l:prompt = 'Step 2/2: enter the match count(s) (comma-separated)'
       \ . ' in the line: '
   " ToDo: handle negative match count.
-  let l:matchCounts = split(input(l:prompt, 1), ',')
+  let l:matchCountsStr = input(l:prompt)
+  if match(l:matchCountsStr, '\S') == -1
+    let l:matchCountsStr = '1'
+  endif
+  let l:matchCounts = s:CsvToNumList(l:matchCountsStr)
+  let l:range = a:flag == 'a'
+      \ ? s:Range(a:mode, a:count, l:pat, l:matchCounts[0])
+      \ : s:Range(a:mode, a:count, s:LTrim(l:pat), l:matchCounts[0])
   for l:matchCount in l:matchCounts
     let l:matchCount = str2nr(l:matchCount)
     if l:matchCount < 1
       echoerr 'The count should be a positive integer.'
       return
-    endif
-    " Determine align range using the first item of the user specified match
-    " count list.
-    if !exists('l:range')
-      let l:range = a:flag == 'a'
-          \ ? s:Range(a:mode, a:count, l:pat, l:matchCount)
-          \ : s:Range(a:mode, a:count, s:LTrim(l:pat), l:matchCount)
     endif
     if a:flag == 'a'
       call s:AlignProcess(l:range, l:pat, l:matchCount)
@@ -54,6 +55,19 @@ function! s:Ask(mode, flag, count) abort "{{{
   endfor
   redraw
   echo 'Processed' l:range[1] - l:range[0] + 1 'lines.'
+endfunction "}}}
+
+function! s:CursorChar() "{{{
+" Get the character under the cursor.
+  return nr2char(strgetchar(getline('.')[col('.') - 1:], 0))
+endfunction "}}}
+
+function! s:CsvToNumList(csv) "{{{
+  let l:list = []
+  for l:str in split(a:csv, ',')
+    call add(l:list, str2nr(l:str))
+  endfor
+  return l:list
 endfunction "}}}
 
 function! s:LTrim(str) "{{{
