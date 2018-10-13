@@ -21,28 +21,25 @@ nnoremap <SID>Unalign :<C-U>call <SID>Ask(mode(), 'u', v:count)<CR>
 xnoremap <SID>Unalign :<C-U>call <SID>Ask(visualmode(), 'u', v:count)<CR>
 
 function! s:Ask(mode, flag, count) abort "{{{
-  let l:prompt = 'Step 1/2: enter the pattern to (un)align: '
-  let l:pat = input(l:prompt)
-  if match(l:pat, '\S') == -1
-    if match(s:CursorChar(), '\S') == -1
-      echoerr 'The pattern must contain a non-blank character.'
-      return
-    endif
-    let l:pat = '\V' . escape(s:CursorChar(), '\')
+  let l:pat = input('Step 1/2: enter the pattern to (un)align: ')
+  if l:pat =~ '^\s*$'
+    let l:pat = s:CursorChar() =~ '\s'
+        \ ? '=' : '\V' . escape(s:CursorChar(), '\')
   endif
-  let l:prompt = 'Step 2/2: enter the match count(s) (comma-separated)'
-      \ . ' in the line: '
+  let l:realPat = a:flag == 'a' ? l:pat : s:LTrim(l:pat)
   " ToDo: handle negative match count.
-  let l:matchCountsStr = input(l:prompt)
-  if match(l:matchCountsStr, '\S') == -1
-    let l:matchCountsStr = '1'
+  let l:matchCountsStr =
+      \ input('Step 2/2: enter the match count(s) (comma-separated): ')
+  if l:matchCountsStr ==# 'g'
+    let l:range = s:Range(a:mode, a:count, l:realPat, 1)
+    let l:maxMatchCount = s:RangeMaxMatchCount(l:range, l:realPat)
+    let l:matchCounts = range(1, max([l:maxMatchCount, 1]))
+  else
+    let l:matchCounts = l:matchCountsStr =~ '^\s*$'
+        \ ? [1] : map(split(l:matchCountsStr, ','), 'str2nr(v:val)')
+    let l:range = s:Range(a:mode, a:count, l:realPat, l:matchCounts[0])
   endif
-  let l:matchCounts = s:CsvToNumList(l:matchCountsStr)
-  let l:range = a:flag == 'a'
-      \ ? s:Range(a:mode, a:count, l:pat, l:matchCounts[0])
-      \ : s:Range(a:mode, a:count, s:LTrim(l:pat), l:matchCounts[0])
   for l:matchCount in l:matchCounts
-    let l:matchCount = str2nr(l:matchCount)
     if l:matchCount < 1
       echoerr 'The count should be a positive integer.'
       return
@@ -62,14 +59,6 @@ function! s:CursorChar() "{{{
   return nr2char(strgetchar(getline('.')[col('.') - 1:], 0))
 endfunction "}}}
 
-function! s:CsvToNumList(csv) "{{{
-  let l:list = []
-  for l:str in split(a:csv, ',')
-    call add(l:list, str2nr(l:str))
-  endfor
-  return l:list
-endfunction "}}}
-
 function! s:LTrim(str) "{{{
   return strpart(a:str, match(a:str, '\S'))
 endfunction! "}}}
@@ -82,16 +71,28 @@ function! s:Range(mode, count, pat, matchCount) "{{{
   endif
   let l:lnum = line('.')
   while l:lnum <= line('$')
-    let l:lstr = getline(l:lnum)
-    if match(l:lstr, a:pat, 0, a:matchCount) == -1
-      break
-    endif
+      \ && match(getline(l:lnum), a:pat, 0, a:matchCount) >= 0
     let l:lnum += 1
   endwhile
   return [line('.'), l:lnum - 1]
 endfunction "}}}
 
-function! s:AlignProcess(range, pat, matchCount) abort " {{{
+function! s:RangeMaxMatchCount(range, pat) "{{{
+  let l:max = 0
+  let l:lnum = a:range[0]
+  while l:lnum <= a:range[1]
+    let l:lstr = getline(l:lnum)
+    let l:matchCount = l:max + 1
+    while l:matchCount <= strlen(l:lstr) && match(l:lstr, a:pat) >= 0
+      let l:matchCount += 1
+    endwhile
+    let l:max = l:matchCount - 1
+    let l:lnum += 1
+  endwhile
+  return l:max
+endfunction "}}}
+
+function! s:AlignProcess(range, pat, matchCount) abort "{{{
 
   " Find the align position.
   let l:lnum = a:range[0]
@@ -114,7 +115,7 @@ function! s:AlignProcess(range, pat, matchCount) abort " {{{
 
     let l:lstr = getline(l:lnum)
     let l:matchIdx = match(l:lstr, a:pat, 0, a:matchCount)
-    if l:matchIdx != -1
+    if l:matchIdx >= 0
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:preDisplayWidth = strdisplaywidth(l:leadingStr)
       if l:aliIdx < l:preDisplayWidth
@@ -132,7 +133,7 @@ function! s:AlignProcess(range, pat, matchCount) abort " {{{
   while l:lnum <= a:range[1]
     let l:lstr = getline(l:lnum)
     let l:matchIdx = match(l:lstr, a:pat, 0, a:matchCount)
-    if l:matchIdx != -1
+    if l:matchIdx >= 0
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:preDisplayWidth = strdisplaywidth(l:leadingStr)
       if l:preDisplayWidth < l:aliIdx
@@ -145,7 +146,7 @@ function! s:AlignProcess(range, pat, matchCount) abort " {{{
     let l:lnum += 1
   endwhile
 
-endfunction " }}}
+endfunction "}}}
 
 function! s:UnalignProcess(range, pat, matchCount) abort "{{{
 
@@ -158,7 +159,7 @@ function! s:UnalignProcess(range, pat, matchCount) abort "{{{
   while l:lnum <= a:range[1]
     let l:lstr = getline(l:lnum)
     let l:matchIdx = match(l:lstr, l:trim, 0, a:matchCount)
-    if l:matchIdx != -1
+    if l:matchIdx >= 0
       let l:leadingStr = strpart(l:lstr, 0, l:matchIdx)
       let l:spIdx = match(l:leadingStr, ' *$')
       if l:preSpNum < l:matchIdx - l:spIdx
